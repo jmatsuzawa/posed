@@ -1,0 +1,152 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import sys
+import re
+from optparse import OptionParser
+from translate.storage.po import pofile
+from translate.misc.multistring import multistring
+
+class SyntaxError(Exception): pass
+
+class Instruction:
+    def __init__(self, matchers, command, operand):
+        self.matchers = matchers
+        if command == 'd':
+            self.command = Delete(operand)
+        elif command == 'p':
+            self.command = Print(operand)
+        elif command == 's':
+            self.command = Substitute(operand)
+        else:
+            raise SyntaxError
+
+    def exe(self, unit):
+        for matcher in self.matchers:
+            if not matcher.match(unit): return
+        self.command.exe(unit)
+
+class Matcher:
+    def __init__(self, entry, address, negative):
+        self.entry = entry or '@T'
+        self.address = address and address[1:-1]
+        self.negative = negative
+
+    def match(self, unit):
+        if not self.address: return True
+
+        if self.entry == '@C':
+            entries = [cmt.rstrip() for cmt in unit.othercomments]
+        elif self.entry == '@F':
+            if unit.isfuzzy():
+                entries = [u'fuzzy'] 
+            else:
+                entries = []
+        elif self.entry == '@L':
+            entries = unit.getlocations()
+        elif self.entry == '@N':
+            entries = [cmt.rstrip() for cmt in unit.automaticcomments]
+        elif self.entry == '@S':
+            entries = unit.source.strings
+        else:
+            entries = unit.target.strings
+
+        matched = False
+        for entry in entries:
+            matched = re.search(self.address, entry)
+            if matched and not self.negative: return True
+        if (not matched) and self.negative: return True
+        return False
+
+class Delete:
+    def __init__(self, operand): pass
+    def exe(self, unit):
+        unit.source = None
+
+class Print:
+    def __init__(self, operand): pass
+
+    def exe(self, unit):
+        print(unit)
+
+class Substitute:
+    def __init__(self, operand):
+        self.operand = operand
+        match = re.search(r'^/(.+)/(.*)/(.*)$', operand)
+        if not match:
+            raise SyntaxError
+        self.pattern = match.group(1)
+        self.repl = match.group(2)
+        self.flags = match.group(3)
+        if 'g' in self.flags:
+            self.count = 0
+        else:
+            self.count = 1
+
+        self.subflags = 0
+        if 'i' in self.flags:
+            self.subflags |= re.IGNORECASE
+
+    def exe(self, unit):
+        replaced = False
+        newtargets = []
+        for target in unit.target.strings:
+            newtarget = re.sub(self.pattern, unicode(self.repl), target,
+                               self.count, self.subflags)
+            if re.search(self.pattern, target): replaced = True
+            newtargets.append(newtarget)
+        if not replaced: return
+        unit.settarget(multistring(newtargets))
+        if 'p' in self.flags:
+            print(unit)
+
+
+def parse_expression(expression):
+    match = re.search(r'^(@[CFLNST](?=/[^/]+/))?(/[^/]+/)?((?<=/)!)?(@[CFLNST](?=/[^/]+/))?(/[^/]+/)?((?<=/)!)?([dps])(.*)$', expression)
+    if not match:
+        sys.exit('Syntax Error: %s' % expression)
+    matchers = [Matcher(match.group(1), match.group(2), match.group(3)),
+                Matcher(match.group(4), match.group(5), match.group(6))]
+    command = match.group(7)
+    operand = match.group(8)
+    inst = Instruction(matchers, command, operand)
+    return inst
+
+
+if __name__ == '__main__':
+    parser = OptionParser()
+    parser.add_option('-e', '--expression',
+                      action = 'store',
+                      type = 'string',
+                      dest = 'expression',
+                      help = 'add the script to the commands to be executed')
+#     parser.add_option('-f', '--file'
+#                       action = 'store'
+#                       type = 'string'
+#                       dest = 'scriptname')
+    parser.add_option('-n', '--quiet',
+                      action = 'store_true',
+                      dest = 'quiet',
+                      default = False,
+                      help = 'suppress automatic printing of pattern space')
+    (options, args) = parser.parse_args()
+    if options.expression:
+        expression = options.expression
+    elif len(args) >= 1:
+        expression = args[0]
+    else:
+        sys.exit('specify your expressions')
+    quiet = options.quiet
+    expression = expression.decode('utf-8')
+
+    instruction = parse_expression(expression)
+
+    input = sys.stdin
+    units = pofile.parsefile(input).units
+    for unit in units:
+        if not unit.source: print(unit)
+        if unit.isobsolete(): continue
+        instruction.exe(unit)
+        if quiet or not unit.source: continue
+        print(unit)
+
