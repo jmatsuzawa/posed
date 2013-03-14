@@ -144,8 +144,10 @@ if __name__ == '__main__':
     input = sys.stdin
     units = pofile.parsefile(input).units
     for unit in units:
-        if not unit.source: print(unit)
-        if unit.isobsolete(): continue
+        if not unit.source:
+            if not quiet: print(unit)
+            continue
+        if unit.isobsolete() and quiet: continue
         instruction.exe(unit)
         if quiet or not unit.source: continue
         print(unit)
