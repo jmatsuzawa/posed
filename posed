@@ -9,6 +9,12 @@ from translate.misc.multistring import multistring
 
 class SyntaxError(Exception): pass
 
+def strings(string):
+    if not isinstance(string, multistring):
+        return (string,)
+    return string
+
+
 class Instruction:
     def __init__(self, matchers, command, operand):
         self.matchers = matchers
@@ -47,9 +53,9 @@ class Matcher:
         elif self.entry == '@N':
             entries = [cmt.rstrip() for cmt in unit.automaticcomments]
         elif self.entry == '@S':
-            entries = unit.source.strings
+            entries = strings(unit.source)
         else:
-            entries = unit.target.strings
+            entries = strings(unit.target)
 
         matched = False
         for entry in entries:
@@ -90,7 +96,7 @@ class Substitute:
     def exe(self, unit):
         replaced = False
         newtargets = []
-        for target in unit.target.strings:
+        for target in strings(unit.target):
             newtarget = re.sub(self.pattern, unicode(self.repl), target,
                                self.count, self.subflags)
             if re.search(self.pattern, target): replaced = True
