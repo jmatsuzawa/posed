@@ -12,7 +12,7 @@ class SyntaxError(Exception): pass
 def strings(string):
     if not isinstance(string, multistring):
         return (string,)
-    return string
+    return string.strings
 
 
 class Instruction:
