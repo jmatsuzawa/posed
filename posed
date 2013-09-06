@@ -54,6 +54,8 @@ class Matcher:
             entries = [cmt.rstrip() for cmt in unit.automaticcomments]
         elif self.entry == '@S':
             entries = strings(unit.source)
+        elif self.entry == '@X':
+            entries = (unit.getcontext(),)
         else:
             entries = strings(unit.target)
 
@@ -108,7 +110,7 @@ class Substitute:
 
 
 def parse_expression(expression):
-    match = re.search(r'^(@[CFLNST](?=/[^/]+/))?(/[^/]+/)?((?<=/)!)?(@[CFLNST](?=/[^/]+/))?(/[^/]+/)?((?<=/)!)?([dps])(.*)$', expression)
+    match = re.search(r'^(@[CFLNSTX](?=/[^/]+/))?(/[^/]+/)?((?<=/)!)?(@[CFLNSTX](?=/[^/]+/))?(/[^/]+/)?((?<=/)!)?([dps])(.*)$', expression)
     if not match:
         sys.exit('Syntax Error: %s' % expression)
     matchers = [Matcher(match.group(1), match.group(2), match.group(3)),
